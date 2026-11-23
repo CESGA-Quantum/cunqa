@@ -26,9 +26,18 @@ Deployment (``qraise``)
     GPU execution (``--gpu``/``--gpu-name``) is only available with ``--simulator Aer``, and requires
     a GPU-enabled build (``-DUSE_GPU=ON``); see :doc:`installation/getting_started`.
 
-**"cores_per_qpu must be equal or greater than 2"**
-    The quantum-communications scheme reserves one core per :term:`vQPU` for the shared :term:`simulator` process, so
-    ``--cores-per-qpu`` must be at least ``2``.
+**"With --quantum_comm, cores_per_qpu must be equal or greater than 2"**
+    By default, the quantum-communications scheme gives one core to each :term:`vQPU` server and the rest
+    (``n * (cores-per-qpu - 1)``) to the shared :term:`simulator` process, so ``--cores-per-qpu`` must be at
+    least ``2``. Alternatively, set the simulator cores explicitly with ``--executor-cores``; see :doc:`reference/commands/qraise`.
+
+**"Invalid --mem-per-qpu value" / "--mem-per-qpu must be at least 256M per vQPU"**
+    ``--mem-per-qpu`` takes a number with an optional unit suffix ``K``, ``M``, ``G`` or ``T``
+    (``512M``, ``1.5G``, ``2GB``); without suffix it is read as GB. Each :term:`vQPU` needs at least ``256M``.
+
+**"--quantum_comm families run on a single node"**
+    A quantum-communications :term:`family` is deployed on a single node, so ``--n-nodes`` greater than 1 and
+    ``--qpus-per-node`` cannot be combined with ``--quantum_comm``.
 
 **"sbatch submission failed" (Python** :py:func:`~cunqa.qpu.qraise` **)**
     The underlying ``sbatch`` call returned an error. Inspect the reported ``stderr`` — common causes

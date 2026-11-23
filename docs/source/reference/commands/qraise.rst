@@ -34,9 +34,11 @@ General deployment options
 ``-p, --partition <string>``
     Partition requested for the :term:`QPUs <QPU>`.
 
-``--mem, --mem-per-qpu <int>``
-    Amount of memory (in GB) assigned to each :term:`QPU`.
-    Default: ``15``
+``--mem, --mem-per-qpu <size>``
+    Amount of memory assigned to each :term:`QPU`. Accepts a unit suffix ``K``, ``M``, ``G`` or ``T``
+    (optionally followed by ``B``) and decimal values, e.g. ``512M``, ``1.5G`` or ``2GB``. A value
+    without suffix is read as GB. The memory is computed in MB and rounded up; the minimum is ``256M``.
+    Default: ``15G``
 
 ``-N, --n-nodes <int>``
     Number of compute nodes used to deploy the :term:`QPUs <QPU>`.
@@ -77,6 +79,10 @@ Grouping and communication options
 ``--quantum_comm``
     Enable :term:`quantum communications` between :term:`QPUs <QPU>`.
 
+``--executor-cores <int>``
+    Only with ``--quantum_comm``. Number of cores of the shared :term:`simulator` process.
+    Default: ``n * (cores-per-qpu - 1)``.
+
 GPU execution
 ~~~~~~~~~~~~~~~~~~~~~~
 ``--gpu``
@@ -99,6 +105,25 @@ Command that deploys 2 :term:`vQPUs <vQPU>` with :term:`classical communications
 .. code-block:: bash
 
    qraise -n 2 -t 00:10:00 --classical_comm --co-located
+
+Resources with quantum communications
+-------------------------------------
+
+With ``--quantum_comm`` the :term:`family` runs on a single node as ``n`` lightweight :term:`vQPU` servers plus
+one shared :term:`simulator` process, and the job reserves exactly what these two parts need:
+
+- **Cores**: one per server plus ``--executor-cores`` for the simulator. By default this is
+  ``n * cores-per-qpu``, so ``--cores-per-qpu`` must be at least ``2`` unless ``--executor-cores`` is
+  given.
+- **Memory**: ``n * mem-per-qpu``. Each server takes a quarter of ``--mem-per-qpu`` (between ``128M`` and
+  ``1G``) and the simulator gets the rest.
+
+For small vQPUs the footprint can be reduced a lot. This deploys 3 vQPUs with 4 cores and 1.5 GB in 
+total:
+
+.. code-block:: bash
+
+   qraise -n 3 -t 01:00:00 --quantum_comm --co-located --mem-per-qpu=512M --executor-cores=1
 
 Notes
 -----

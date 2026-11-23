@@ -10,7 +10,7 @@ struct CunqaArgs : public argparse::Args
     std::string& time                                   = kwarg("t,time", "Time for the QPUs to be raised.").set_default("");
     int& cores_per_qpu                                  = kwarg("c,cores-per-qpu", "Number of cores per QPU.").set_default(2);
     std::optional<std::string>& partition               = kwarg("p,partition", "Partition requested for the QPUs.");
-    std::optional<int>& mem_per_qpu                     = kwarg("mem,mem-per-qpu", "Memory given to each QPU in GB.").set_default(15);
+    std::optional<std::string>& mem_per_qpu             = kwarg("mem,mem-per-qpu", "Memory given to each QPU. Accepts a unit suffix (K, M, G, T); without suffix it is read as GB.").set_default("15G");
     std::optional<std::size_t>& n_nodes                 = kwarg("N,n-nodes", "Number of nodes.").set_default(1);
     std::optional<std::vector<std::string>>& node_list  = kwarg("nodelist", "List of nodes where the QPUs will be deployed.").multi_argument(); 
     std::optional<int>& qpus_per_node                   = kwarg("qpuN,qpus-per-node", "Number of qpus in each node.");
@@ -21,6 +21,7 @@ struct CunqaArgs : public argparse::Args
     bool& co_located                                    = flag("co-located", "co-located mode. The user can connect with any deployed QPU.");
     bool& cc                                            = flag("classical_comm", "Enable classical communications.");
     bool& qc                                            = flag("quantum_comm", "Enable quantum communications.");
+    std::optional<int>& executor_cores                  = kwarg("executor-cores", "[quantum_comm] Cores of the shared simulator process. Default: n * (cores-per-qpu - 1).");
     std::optional<std::string>& infrastructure          = kwarg("infrastructure", "Path to a infrastructure configuration file");
     bool& qmio                                          = flag("qmio", "Deploy QMIO.").set_default(false);
     bool& gpu                                           = flag("gpu", "Run on GPU").set_default(false);

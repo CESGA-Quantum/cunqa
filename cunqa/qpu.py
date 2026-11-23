@@ -349,6 +349,7 @@ def qraise(n, t, *,
            co_located = True, 
            cores_per_qpu = None, 
            mem_per_qpu = None, 
+           executor_cores = None,
            n_nodes = None, 
            node_list = None, 
            qpus_per_node = None,
@@ -379,8 +380,12 @@ def qraise(n, t, *,
                            nodes.
         cores_per_qpu (int): number of cores per vQPU, the total for the SLURM job will be
                              `n*cores_per_qpu`.
-        mem_per_qpu (str): memory to allocate for each vQPU in GB (the ``G`` suffix is appended
-                           automatically).
+        mem_per_qpu (int | float | str): memory to allocate for each vQPU. A plain number
+                                         (``4``, ``1.5``) is read as GB; a string may carry a unit
+                                         suffix (``"512M"``, ``"1.5G"``, ``"2GB"``). Minimum 256M.
+        executor_cores (int): only with ``quantum_comm``: cores of the shared simulator process
+                              (each vQPU server always takes one core). Default:
+                              ``n*(cores_per_qpu-1)``.
         n_nodes (str): number of nodes for the SLURM job.
         node_list (str): list of nodes in which the vQPUs will be deployed.
         qpus_per_node (str): sets the number of vQPUs deployed on each node.
@@ -412,7 +417,13 @@ def qraise(n, t, *,
     if cores_per_qpu is not None:
         command = command + f" --cores-per-qpu={str(cores_per_qpu)}"
     if mem_per_qpu is not None:
-        command = command + f" --mem-per-qpu={str(mem_per_qpu)}G"
+        mem = str(mem_per_qpu).strip()
+        # A plain number is read as GB, for backward compatibility
+        if mem and mem[-1].isdigit():
+            mem += "G"
+        command = command + f" --mem-per-qpu={mem}"
+    if executor_cores is not None:
+        command = command + f" --executor-cores={str(executor_cores)}"
     if n_nodes is not None:
         command = command + f" --n-nodes={str(n_nodes)}"
     if node_list is not None:
