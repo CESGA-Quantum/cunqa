@@ -1,7 +1,5 @@
-#include <regex>
 #include <fstream>
-#include <cmath>
-#include <cctype>
+#include <string>
 #include <cstdio> // For popen, pclose
 #include <algorithm>
 #include <filesystem>
@@ -18,24 +16,31 @@
 
 namespace {
 
-void write_sbatch_header(std::ofstream& sbatchFile, const CunqaArgs& args, Communications scheme)
+void write_sbatch_header(std::ofstream& sbatchFile, const CunqaArgs& args, Communications scheme,
+                         const Resources& res)
 {
     sbatchFile << "#!/bin/bash\n";
     sbatchFile << "#SBATCH --job-name=qraise \n";
 
-    const int ntasks = (scheme == Communications::QC) ? args.n_qpus + 1 : args.n_qpus;
-    sbatchFile << "#SBATCH --ntasks=" << ntasks << "\n";
+    if (scheme == Communications::QC) {
+        // A single task holding the CPUs of all steps, so that the steps (n vQPU servers + the
+        // executor) always fit in the job and no step asks for more cpus-per-task than the job.
+        sbatchFile << "#SBATCH --ntasks=1\n";
+        sbatchFile << "#SBATCH -c " << res.job_cores << "\n";
+        sbatchFile << "#SBATCH -N 1\n";
+    } else {
+        sbatchFile << "#SBATCH --ntasks=" << args.n_qpus << "\n";
+        sbatchFile << "#SBATCH -c " << args.cores_per_qpu << "\n";
 
-    sbatchFile << "#SBATCH -c " << args.cores_per_qpu << "\n";
+        if (args.n_nodes.has_value())
+            sbatchFile << "#SBATCH -N " << args.n_nodes.value() << "\n";
+
+        if (args.qpus_per_node.has_value())
+            sbatchFile << "#SBATCH --ntasks-per-node=" << args.qpus_per_node.value() << "\n";
+    }
 
     if (args.partition.has_value())
             sbatchFile << "#SBATCH --partition=" << args.partition.value() << "\n";
-
-    if (args.n_nodes.has_value())
-        sbatchFile << "#SBATCH -N " << args.n_nodes.value() << "\n";
-
-    if (args.qpus_per_node.has_value())
-        sbatchFile << "#SBATCH --ntasks-per-node=" << args.qpus_per_node.value() << "\n";
 
     if (args.node_list.has_value()) {
         sbatchFile << "#SBATCH --nodelist=";
@@ -48,16 +53,11 @@ void write_sbatch_header(std::ofstream& sbatchFile, const CunqaArgs& args, Commu
         }
         sbatchFile << "\n";
     }
-    
-    if (args.mem_per_qpu.has_value()) {
-        if (args.n_nodes.has_value()) {
-            const int mem_per_cpu = static_cast<int>(args.mem_per_qpu.value() / args.cores_per_qpu);
-            sbatchFile << "#SBATCH --mem-per-cpu=" << mem_per_cpu << "G\n";
-        } else {
-            const int total_mem = args.mem_per_qpu.value() * args.n_qpus;
-            sbatchFile << "#SBATCH --mem=" << total_mem << "G\n";
-        }
-    }
+
+    if (scheme == Communications::QC)
+        sbatchFile << "#SBATCH --mem=" << res.job_mem_mb << "M\n";
+    else
+        sbatchFile << "#SBATCH --mem-per-cpu=" << res.mem_per_cpu_mb << "M\n";
 
     sbatchFile << "#SBATCH --time=" << args.time << "\n";
     sbatchFile << "#SBATCH --output=qraise_%j\n\n";
@@ -79,7 +79,8 @@ void write_sbatch_header(std::ofstream& sbatchFile, const CunqaArgs& args, Commu
 
 void write_run_command(std::ofstream& sbatchFile,
                        const CunqaArgs& args,
-                       Communications scheme)
+                       Communications scheme,
+                       const Resources& res)
 {
     auto subcommand =
         std::string(args.co_located ? "co_located" : "hpc") + " " +
@@ -102,33 +103,26 @@ void write_run_command(std::ofstream& sbatchFile,
         sbatchFile << " --task-epilog=$EPILOG_PATH setup_qpus " << subcommand << '\n';
     } else if (scheme == Communications::QC) {
 
-        std::vector<std::string> gpu_info{"--gres=none ", "--gres=none "}; 
+        std::string executor_gres = "--gres=none ";
         if (args.gpu || args.gpu_name.has_value()) {
             if (!args.gpu_name.has_value())
-                gpu_info[1] = "--gres=gpu:1 ";
+                executor_gres = "--gres=gpu:1 ";
             else
-                gpu_info[1] = "--gres=gpu:" + args.gpu_name.value() + ":1 ";
+                executor_gres = "--gres=gpu:" + args.gpu_name.value() + ":1 ";
         }
 
-        sbatchFile 
-            << "srun --exact --exclusive -n " << args.n_qpus << " -c 1 --mem-per-cpu=1G "
-            << gpu_info[0] << "--task-epilog=$EPILOG_PATH setup_qpus " << subcommand << " &\n";
+        // vQPU servers: one core each. Note: --overcommit does not make the tasks of a step share
+        // CPUs (each task is still bound to its own core), so it can not be used to pack them.
+        sbatchFile
+            << "srun --exact --exclusive -n " << args.n_qpus << " -c 1 "
+            << "--mem=" << res.servers_mem_mb << "M "
+            << "--gres=none --task-epilog=$EPILOG_PATH setup_qpus " << subcommand << " &\n";
 
-        sbatchFile << "srun --exact --exclusive " << gpu_info[1] << "-n 1 -c ";
-
-        const int simulator_n_cores = args.n_qpus * (args.cores_per_qpu - 1);
-        if (simulator_n_cores <= 0)
-            throw std::invalid_argument("cores_per_qpu must be equal or greater than 2.");
-
-        sbatchFile << std::to_string(simulator_n_cores) << " ";
-
-        if (args.mem_per_qpu.has_value()) {
-            const int simulator_memory = args.n_qpus * (args.mem_per_qpu.value() - 1);
-            sbatchFile << "--mem=" << simulator_memory << "G ";
-        }
-
-        sbatchFile 
-            << gpu_info[1] << "setup_executor " << args.simulator << " " << args.n_qpus << "\n";
+        sbatchFile
+            << "srun --exact --exclusive " << executor_gres
+            << "-n 1 -c " << res.executor_cores << " "
+            << "--mem=" << res.executor_mem_mb << "M "
+            << "setup_executor " << args.simulator << " " << args.n_qpus << "\n";
     }
 }
 
@@ -185,8 +179,9 @@ void write_sbatch(std::ofstream& sbatchFile, const CunqaArgs& args)
             args.family + ".");
 
     if (!args.qmio) {
-        write_sbatch_header(sbatchFile, args, scheme);
-        write_run_command(sbatchFile, args, scheme);
+        const Resources res = compute_resources(args, scheme);
+        write_sbatch_header(sbatchFile, args, scheme, res);
+        write_run_command(sbatchFile, args, scheme, res);
     } else
         write_qmio(sbatchFile, args);
 }

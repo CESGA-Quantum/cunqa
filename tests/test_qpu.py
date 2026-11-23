@@ -435,6 +435,43 @@ def test_qraise_builds_full_command_with_all_options_and_family_tuple_return(mon
     assert result == family
 
 
+@pytest.mark.parametrize("mem_per_qpu, expected", [
+    (16, "--mem-per-qpu=16G"),       # plain number: GB (backward compatible)
+    (1.5, "--mem-per-qpu=1.5G"),
+    ("4", "--mem-per-qpu=4G"),
+    ("512M", "--mem-per-qpu=512M"),  # explicit unit: passed through
+    ("1.5G", "--mem-per-qpu=1.5G"),
+    ("2GB", "--mem-per-qpu=2GB"),
+])
+def test_qraise_mem_per_qpu_units(monkeypatch, mem_per_qpu, expected):
+    monkeypatch.setattr(qpu_mod, "read_qpus", lambda *_: {"11111-0": {}})
+    monkeypatch.setattr(qpu_mod.time, "sleep", lambda *_: None)
+
+    run_mock = Mock()
+    run_mock.side_effect = _subprocess_run_side_effect_ok("11111")
+    monkeypatch.setattr(qpu_mod.subprocess, "run", run_mock)
+
+    qraise(1, "00:10:00", mem_per_qpu=mem_per_qpu)
+
+    (cmd_str,), _ = run_mock.call_args_list[0]
+    assert cmd_str.split()[-1] == expected
+
+
+def test_qraise_passes_executor_cores(monkeypatch):
+    monkeypatch.setattr(qpu_mod, "read_qpus", lambda *_: {"22222-0": {}, "22222-1": {}, "22222-2": {}})
+    monkeypatch.setattr(qpu_mod.time, "sleep", lambda *_: None)
+
+    run_mock = Mock()
+    run_mock.side_effect = _subprocess_run_side_effect_ok("22222")
+    monkeypatch.setattr(qpu_mod.subprocess, "run", run_mock)
+
+    qraise(3, "00:10:00", quantum_comm=True, co_located=False, executor_cores=1)
+
+    (cmd_str,), _ = run_mock.call_args_list[0]
+    assert cmd_str == ("qraise -n 3 -t 00:10:00 --quantum_comm "
+                       "--executor-cores=1")
+
+
 # --- Registry directory of the family ---
 
 @pytest.mark.parametrize("family, registry_family", [(None, "99999"), ("default", "99999"), ("famX", "famX")])
