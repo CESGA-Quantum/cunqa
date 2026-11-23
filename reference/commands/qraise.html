@@ -78,6 +78,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#synopsis">Synopsis</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#options">Options</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#basic-usage">Basic usage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#resources-with-quantum-communications">Resources with quantum communications</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
@@ -157,8 +158,10 @@ Default: <code class="docutils literal notranslate"><span class="pre">2</span></
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-p,</span> <span class="pre">--partition</span> <span class="pre">&lt;string&gt;</span></code></dt><dd><p>Partition requested for the <a class="reference internal" href="../../glossary.html#term-QPU"><span class="xref std std-term">QPUs</span></a>.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--mem,</span> <span class="pre">--mem-per-qpu</span> <span class="pre">&lt;int&gt;</span></code></dt><dd><p>Amount of memory (in GB) assigned to each <a class="reference internal" href="../../glossary.html#term-QPU"><span class="xref std std-term">QPU</span></a>.
-Default: <code class="docutils literal notranslate"><span class="pre">15</span></code></p>
+<dt><code class="docutils literal notranslate"><span class="pre">--mem,</span> <span class="pre">--mem-per-qpu</span> <span class="pre">&lt;size&gt;</span></code></dt><dd><p>Amount of memory assigned to each <a class="reference internal" href="../../glossary.html#term-QPU"><span class="xref std std-term">QPU</span></a>. Accepts a unit suffix <code class="docutils literal notranslate"><span class="pre">K</span></code>, <code class="docutils literal notranslate"><span class="pre">M</span></code>, <code class="docutils literal notranslate"><span class="pre">G</span></code> or <code class="docutils literal notranslate"><span class="pre">T</span></code>
+(optionally followed by <code class="docutils literal notranslate"><span class="pre">B</span></code>) and decimal values, e.g. <code class="docutils literal notranslate"><span class="pre">512M</span></code>, <code class="docutils literal notranslate"><span class="pre">1.5G</span></code> or <code class="docutils literal notranslate"><span class="pre">2GB</span></code>. A value
+without suffix is read as GB. The memory is computed in MB and rounded up; the minimum is <code class="docutils literal notranslate"><span class="pre">256M</span></code>.
+Default: <code class="docutils literal notranslate"><span class="pre">15G</span></code></p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-N,</span> <span class="pre">--n-nodes</span> <span class="pre">&lt;int&gt;</span></code></dt><dd><p>Number of compute nodes used to deploy the <a class="reference internal" href="../../glossary.html#term-QPU"><span class="xref std std-term">QPUs</span></a>.
 Default: <code class="docutils literal notranslate"><span class="pre">1</span></code></p>
@@ -194,6 +197,9 @@ Otherwise, the user can only access it from the node it is deployed on.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--quantum_comm</span></code></dt><dd><p>Enable <a class="reference internal" href="../../glossary.html#term-quantum-communications"><span class="xref std std-term">quantum communications</span></a> between <a class="reference internal" href="../../glossary.html#term-QPU"><span class="xref std std-term">QPUs</span></a>.</p>
 </dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--executor-cores</span> <span class="pre">&lt;int&gt;</span></code></dt><dd><p>Only with <code class="docutils literal notranslate"><span class="pre">--quantum_comm</span></code>. Number of cores of the shared <a class="reference internal" href="../../glossary.html#term-simulator"><span class="xref std std-term">simulator</span></a> process.
+Default: <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">*</span> <span class="pre">(cores-per-qpu</span> <span class="pre">-</span> <span class="pre">1)</span></code>.</p>
+</dd>
 </dl>
 </section>
 <section id="gpu-execution">
@@ -217,6 +223,23 @@ Otherwise, the user can only access it from the node it is deployed on.</p>
 <h2>Basic usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h2>
 <p>Command that deploys 2 <a class="reference internal" href="../../glossary.html#term-vQPU"><span class="xref std std-term">vQPUs</span></a> with <a class="reference internal" href="../../glossary.html#term-classical-communications"><span class="xref std std-term">classical communications</span></a>, for 10 minutes and accessible from any node:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>qraise<span class="w"> </span>-n<span class="w"> </span><span class="m">2</span><span class="w"> </span>-t<span class="w"> </span><span class="m">00</span>:10:00<span class="w"> </span>--classical_comm<span class="w"> </span>--co-located
+</pre></div>
+</div>
+</section>
+<section id="resources-with-quantum-communications">
+<h2>Resources with quantum communications<a class="headerlink" href="#resources-with-quantum-communications" title="Link to this heading"></a></h2>
+<p>With <code class="docutils literal notranslate"><span class="pre">--quantum_comm</span></code> the <a class="reference internal" href="../../glossary.html#term-family"><span class="xref std std-term">family</span></a> runs on a single node as <code class="docutils literal notranslate"><span class="pre">n</span></code> lightweight <a class="reference internal" href="../../glossary.html#term-vQPU"><span class="xref std std-term">vQPU</span></a> servers plus
+one shared <a class="reference internal" href="../../glossary.html#term-simulator"><span class="xref std std-term">simulator</span></a> process, and the job reserves exactly what these two parts need:</p>
+<ul class="simple">
+<li><p><strong>Cores</strong>: one per server plus <code class="docutils literal notranslate"><span class="pre">--executor-cores</span></code> for the simulator. By default this is
+<code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">*</span> <span class="pre">cores-per-qpu</span></code>, so <code class="docutils literal notranslate"><span class="pre">--cores-per-qpu</span></code> must be at least <code class="docutils literal notranslate"><span class="pre">2</span></code> unless <code class="docutils literal notranslate"><span class="pre">--executor-cores</span></code> is
+given.</p></li>
+<li><p><strong>Memory</strong>: <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">*</span> <span class="pre">mem-per-qpu</span></code>. Each server takes a quarter of <code class="docutils literal notranslate"><span class="pre">--mem-per-qpu</span></code> (between <code class="docutils literal notranslate"><span class="pre">128M</span></code> and
+<code class="docutils literal notranslate"><span class="pre">1G</span></code>) and the simulator gets the rest.</p></li>
+</ul>
+<p>For small vQPUs the footprint can be reduced a lot. This deploys 3 vQPUs with 4 cores and 1.5 GB in
+total:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>qraise<span class="w"> </span>-n<span class="w"> </span><span class="m">3</span><span class="w"> </span>-t<span class="w"> </span><span class="m">01</span>:00:00<span class="w"> </span>--quantum_comm<span class="w"> </span>--co-located<span class="w"> </span>--mem-per-qpu<span class="o">=</span>512M<span class="w"> </span>--executor-cores<span class="o">=</span><span class="m">1</span>
 </pre></div>
 </div>
 </section>
